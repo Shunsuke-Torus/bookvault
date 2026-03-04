@@ -10,6 +10,7 @@ export function NavLinks() {
         { href: "/", label: "ホーム", icon: "home" },
         { href: "/bookshelf", label: "本棚", icon: "shelves" },
         { href: "/search", label: "検索", icon: "search" },
+        { href: "/settings", label: "設定", icon: "settings" },
     ];
 
     return (

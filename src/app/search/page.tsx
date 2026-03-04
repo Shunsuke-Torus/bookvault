@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 interface SearchResult {
-    googleBooksId: string;
+    externalId: string;
     title: string;
     seriesTitle: string | null;
     volumeNumber: number | null;
@@ -208,7 +208,7 @@ export default function SearchPage() {
     }
 
     function toggleGroupAll(group: SeriesGroup) {
-        const allIds = group.volumes.map((v) => v.googleBooksId);
+        const allIds = group.volumes.map((v) => v.externalId);
         const allSelected = allIds.every((id) => selected.has(id));
         setSelected((prev) => {
             const next = new Set(prev);
@@ -221,7 +221,7 @@ export default function SearchPage() {
     async function handleBatchRegister() {
         setRegistering(true);
         const allVolumes = groups.flatMap((g) => g.volumes);
-        const toRegister = allVolumes.filter((v) => selected.has(v.googleBooksId));
+        const toRegister = allVolumes.filter((v) => selected.has(v.externalId));
 
         let successCount = 0;
         for (const vol of toRegister) {
@@ -236,8 +236,8 @@ export default function SearchPage() {
                         volumeNumber: vol.volumeNumber,
                         isbn: vol.isbn,
                         coverImageUrl: vol.coverImageUrl,
-                        googleBooksId: vol.googleBooksId,
-                        googleSeriesId: vol.seriesId,
+                        externalId: vol.externalId,
+                        externalSeriesId: vol.seriesId,
                         platformName: registerForm.platformName || undefined,
                         customUrl: registerForm.customUrl || undefined,
                         format: registerForm.format,
@@ -290,7 +290,7 @@ export default function SearchPage() {
 
             {/* 検索結果 */}
             {groups.map((group, gi) => {
-                const allIds = group.volumes.map((v) => v.googleBooksId);
+                const allIds = group.volumes.map((v) => v.externalId);
                 const allSelected = allIds.every((id) => selected.has(id));
 
                 return (
@@ -323,18 +323,18 @@ export default function SearchPage() {
                         {/* 巻リスト */}
                         {group.volumes.map((vol) => (
                             <div
-                                key={vol.googleBooksId}
+                                key={vol.externalId}
                                 className="flex items-center gap-3 px-3.5 py-3 border-b border-border last:border-b-0 bg-bg-primary transition-colors hover:bg-bg-hover"
                             >
                                 <button
                                     type="button"
-                                    onClick={() => toggleSelect(vol.googleBooksId)}
-                                    className={`w-[22px] h-[22px] rounded flex items-center justify-center shrink-0 border-2 transition-all cursor-pointer ${selected.has(vol.googleBooksId)
+                                    onClick={() => toggleSelect(vol.externalId)}
+                                    className={`w-[22px] h-[22px] rounded flex items-center justify-center shrink-0 border-2 transition-all cursor-pointer ${selected.has(vol.externalId)
                                         ? "bg-accent-green border-accent-green text-white"
                                         : "border-border-hover bg-bg-primary hover:border-accent"
                                         }`}
                                 >
-                                    {selected.has(vol.googleBooksId) && (
+                                    {selected.has(vol.externalId) && (
                                         <span className="material-symbols-outlined text-[16px]">check</span>
                                     )}
                                 </button>

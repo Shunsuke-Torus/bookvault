@@ -38,10 +38,56 @@ export interface GoogleBooksResponse {
     totalItems: number;
     items?: GoogleBooksVolume[];
 }
+// 楽天ブックスAPIレスポンスの型定義
+export interface RakutenBooksItem {
+    Item: {
+        title: string;
+        titleKana: string;
+        subTitle: string;
+        subTitleKana: string;
+        seriesName: string;
+        seriesNameKana: string;
+        contents: string;
+        author: string;
+        authorKana: string;
+        publisherName: string;
+        size: string;
+        isbn: string;
+        itemCaption: string;
+        salesDate: string;
+        itemPrice: number;
+        listPrice: number;
+        discountRate: number;
+        discountPrice: number;
+        itemUrl: string;
+        affiliateUrl: string;
+        smallImageUrl: string;
+        mediumImageUrl: string;
+        largeImageUrl: string;
+        chirayomiUrl: string;
+        availability: string;
+        postageFlag: number;
+        limitedFlag: number;
+        reviewCount: number;
+        reviewAverage: string;
+        booksGenreId: string;
+    };
+}
+
+export interface RakutenBooksResponse {
+    count: number;
+    page: number;
+    first: number;
+    last: number;
+    hits: number;
+    carrier: number;
+    pageCount: number;
+    Items: RakutenBooksItem[];
+}
 
 // BookVault内部の型定義
 export interface BookSearchResult {
-    googleBooksId: string;
+    externalId: string; // 楽天: "rakuten-{isbn}", Google: Google Books ID
     title: string;
     seriesTitle: string | null;
     volumeNumber: number | null;
@@ -53,7 +99,7 @@ export interface BookSearchResult {
     coverImageUrl: string | null;
     categories: string[];
     listPrice: number | null;
-    seriesId: string | null; // Google Books のシリーズID
+    seriesId: string | null;
 }
 
 export interface CreateBookInput {
@@ -64,8 +110,8 @@ export interface CreateBookInput {
     isbn?: string;
     coverImageUrl?: string;
     description?: string;
-    googleBooksId?: string;
-    googleSeriesId?: string;
+    externalId?: string; // 楽天: "rakuten-{isbn}", Google: Google Books ID
+    externalSeriesId?: string;
     seriesId?: number; // 既存のDB上のシリーズID
     platformName?: string;
     platformBookId?: string;

@@ -13,7 +13,7 @@ version: 0.1
 - 📖 **書籍管理**: Google Books API連携による書籍検索・自動メタデータ取得
 - 🏪 **購入元管理**: Amazon Kindle / DMM / 楽天Kobo / NextCloud等のプラットフォーム対応
 - 📊 **読書進捗**: 未読 / 読書中 / 既読 / 積読の4状態管理
-- 📥 **CSVインポート**: 一括書籍登録（タイトル検索ベースの自動補完付き）
+- 📥 **CSV/JSONインポート・エクスポート**: 手動でのバックアップと一括書籍登録
 - 🏷️ **ラベル管理**: 自動・手動ラベル付けとスマートコレクション
 - 🔗 **カスタムURL**: NextCloud上の自炊書籍へのリンク対応
 
@@ -25,7 +25,7 @@ version: 0.1
 | バックエンド   | Next.js API Routes                 |
 | データベース   | SQLite (WALモード) + Drizzle ORM   |
 | バリデーション | Zod                                |
-| CSVパース      | PapaParse                          |
+| CSV/JSONパース | PapaParse / 標準JSON               |
 | コンテナ       | Docker + Docker Compose            |
 | CI/CD          | GitHub Actions                     |
 
@@ -69,4 +69,5 @@ docker compose up -d
 | `/api/series`            | GET      | シリーズ一覧             |
 | `/api/series?id=N`       | GET      | シリーズ詳細（巻一覧）   |
 | `/api/platforms`         | GET      | プラットフォーム一覧     |
-| `/api/import`            | POST     | CSVインポート            |
+| `/api/import`            | POST     | CSV/JSONインポート       |
+| `/api/export`            | GET      | CSV/JSONエクスポート     |

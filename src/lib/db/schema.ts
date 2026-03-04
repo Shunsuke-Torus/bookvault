@@ -213,7 +213,7 @@ export const notificationLog = sqliteTable("notification_log", {
 // ============================================================
 export const importLog = sqliteTable("import_log", {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    source: text("source", { enum: ["csv", "api_batch", "manual"] }).notNull(),
+    source: text("source", { enum: ["csv", "json", "api_batch", "manual"] }).notNull(),
     filename: text("filename"),
     totalRecords: integer("total_records").notNull().default(0),
     successCount: integer("success_count").notNull().default(0),

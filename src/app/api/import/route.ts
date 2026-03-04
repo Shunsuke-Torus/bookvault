@@ -1,145 +1,163 @@
-import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { importLog, importLogItem } from "@/lib/db/schema";
-import { createBook } from "@/lib/services/book-service";
-import { searchBooks } from "@/lib/services/search-service";
+import { book, series, ownership, platform, importLog, importLogItem } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { NextResponse } from "next/server";
 import Papa from "papaparse";
-import type { CsvImportRow } from "@/lib/types";
 
-/**
- * POST /api/import
- * CSVファイルをインポート（タイトル検索ベース）
- */
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
     try {
         const formData = await request.formData();
         const file = formData.get("file") as File;
 
         if (!file) {
-            return NextResponse.json(
-                { error: "CSVファイルを指定してください" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "ファイルがアップロードされていません。" }, { status: 400 });
         }
 
-        const csvText = await file.text();
-        const { data, errors } = Papa.parse<CsvImportRow>(csvText, {
-            header: true,
-            skipEmptyLines: true,
-            transformHeader: (header: string) => header.trim().toLowerCase(),
-        });
+        const fileName = file.name;
+        const fileExt = fileName.split(".").pop()?.toLowerCase();
+        const text = await file.text();
 
-        if (errors.length > 0) {
-            return NextResponse.json(
-                { error: "CSVパースエラー", details: errors },
-                { status: 400 }
-            );
+        let parsedData: any[] = [];
+        let sourceType: "csv" | "json" = "csv";
+
+        if (fileExt === "json") {
+            parsedData = JSON.parse(text);
+            sourceType = "json";
+        } else if (fileExt === "csv") {
+            const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+            parsedData = result.data;
+        } else {
+            return NextResponse.json({ error: "CSVまたはJSONファイルが必要です。" }, { status: 400 });
         }
-
-        // インポートログを作成
-        const log = db
-            .insert(importLog)
-            .values({
-                source: "csv",
-                filename: file.name,
-                totalRecords: data.length,
-            })
-            .returning()
-            .get();
 
         let successCount = 0;
         let errorCount = 0;
+        let skipCount = 0;
 
-        for (const row of data) {
+        // Create Import Log
+        const [{ importId }] = await db.insert(importLog).values({
+            source: sourceType,
+            filename: fileName,
+            totalRecords: parsedData.length
+        }).returning({ importId: importLog.id });
+
+        // Fetch all platforms once
+        const allPlatforms = await db.select().from(platform).all();
+        const platformMap = new Map(allPlatforms.map(p => [p.name, p.id]));
+
+        for (const row of parsedData) {
             try {
-                if (!row.title || !row.author) {
-                    db.insert(importLogItem)
-                        .values({
-                            importLogId: log.id,
-                            rawData: JSON.stringify(row),
-                            status: "error",
-                            errorMessage: "title と author は必須です",
-                        })
-                        .run();
-                    errorCount++;
-                    continue;
+                const title = row.title || row.seriesTitle;
+                const author = row.author || row.authorName;
+
+                if (!title || !author) {
+                    throw new Error("Title and Author are required parameters.");
                 }
 
-                // Google Books APIでタイトル検索してメタデータを取得
-                let coverImageUrl: string | null = null;
-                let googleBooksId: string | null = null;
-                let googleSeriesId: string | null = null;
-                let publisher: string | null = null;
+                // 1. Find or create series
+                let seriesRecord = await db.select().from(series).where(
+                    and(eq(series.title, title), eq(series.author, author))
+                ).get();
 
-                const searchQuery = row.volume
-                    ? `${row.title} ${row.volume}`
-                    : row.title;
-
-                const searchResults = await searchBooks(searchQuery, 3);
-                if (searchResults.length > 0) {
-                    const best = searchResults[0];
-                    coverImageUrl = best.coverImageUrl;
-                    googleBooksId = best.googleBooksId;
-                    googleSeriesId = best.seriesId;
-                    publisher = best.publisher;
+                if (!seriesRecord) {
+                    const [newSeries] = await db.insert(series).values({
+                        title,
+                        author,
+                        status: "ongoing"
+                    }).returning();
+                    seriesRecord = newSeries;
                 }
 
-                const newBook = await createBook({
-                    title: row.volume ? `${row.title} ${row.volume}` : row.title,
-                    author: row.author,
-                    publisher: publisher ?? undefined,
-                    volumeNumber: row.volume ? parseInt(row.volume, 10) : undefined,
-                    isbn: row.isbn,
-                    coverImageUrl: coverImageUrl ?? undefined,
-                    googleBooksId: googleBooksId ?? undefined,
-                    googleSeriesId: googleSeriesId ?? undefined,
-                    platformName: row.platform,
-                    customUrl: row.custom_url,
-                    format: (row.format as "digital" | "physical") ?? "digital",
-                    readingStatus:
-                        (row.status as "unread" | "reading" | "read" | "backlog") ??
-                        "unread",
+                // 2. Insert book if not exists for that series and volume
+                const volumeNumber = row.volume ? parseInt(row.volume, 10) : undefined;
+                let bookRecord = await db.select().from(book).where(
+                    and(
+                        eq(book.seriesId, seriesRecord.id),
+                        volumeNumber !== undefined ? eq(book.volumeNumber, volumeNumber) : eq(book.title, title)
+                    )
+                ).get();
+
+                if (!bookRecord) {
+                    const [newBook] = await db.insert(book).values({
+                        seriesId: seriesRecord.id,
+                        title: title,
+                        volumeNumber,
+                        isbn: row.isbn || null,
+                        readingStatus: row.status || row.readingStatus || "unread",
+                        rating: row.rating ? parseInt(row.rating, 10) : null,
+                        memo: row.memo || null,
+                    }).returning();
+                    bookRecord = newBook;
+                }
+
+                // 3. Handle ownership(s)
+                if (sourceType === "json" && Array.isArray(row.ownerships)) {
+                    for (const own of row.ownerships) {
+                        if (own.platformName) {
+                            const platId = platformMap.get(own.platformName);
+                            if (platId) {
+                                const existingOwnership = await db.select().from(ownership).where(
+                                    and(eq(ownership.bookId, bookRecord.id), eq(ownership.platformId, platId))
+                                ).get();
+                                if (!existingOwnership) {
+                                    await db.insert(ownership).values({
+                                        bookId: bookRecord.id,
+                                        platformId: platId,
+                                        format: own.format || "digital",
+                                        purchasedAt: own.purchasedAt || row.purchased_at || null
+                                    });
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    const platStr = row.platform || row.platformName;
+                    if (platStr) {
+                        const platId = platformMap.get(platStr);
+                        if (platId) {
+                            const existingOwnership = await db.select().from(ownership).where(
+                                and(eq(ownership.bookId, bookRecord.id), eq(ownership.platformId, platId))
+                            ).get();
+                            if (!existingOwnership) {
+                                await db.insert(ownership).values({
+                                    bookId: bookRecord.id,
+                                    platformId: platId,
+                                    format: row.format || "digital",
+                                    purchasedAt: row.purchased_at || row.purchasedAt || null
+                                });
+                            }
+                        }
+                    }
+                }
+
+                successCount++;
+                await db.insert(importLogItem).values({
+                    importLogId: importId,
+                    bookId: bookRecord.id,
+                    rawData: JSON.stringify(row),
+                    status: "success"
                 });
 
-                db.insert(importLogItem)
-                    .values({
-                        importLogId: log.id,
-                        bookId: newBook.id,
-                        rawData: JSON.stringify(row),
-                        status: "success",
-                    })
-                    .run();
-                successCount++;
-            } catch (err) {
-                db.insert(importLogItem)
-                    .values({
-                        importLogId: log.id,
-                        rawData: JSON.stringify(row),
-                        status: "error",
-                        errorMessage:
-                            err instanceof Error ? err.message : "不明なエラー",
-                    })
-                    .run();
+            } catch (err: any) {
                 errorCount++;
+                await db.insert(importLogItem).values({
+                    importLogId: importId,
+                    rawData: JSON.stringify(row),
+                    status: "error",
+                    errorMessage: err.message
+                });
             }
         }
 
-        // ログの集計を更新
-        db.update(importLog)
-            .set({ successCount, errorCount })
-            .run();
-
-        return NextResponse.json({
-            importId: log.id,
-            totalRecords: data.length,
+        await db.update(importLog).set({
             successCount,
-            errorCount,
-        });
-    } catch (error) {
-        console.error("Import error:", error);
-        return NextResponse.json(
-            { error: "インポート中にエラーが発生しました" },
-            { status: 500 }
-        );
+            errorCount
+        }).where(eq(importLog.id, importId));
+
+        return NextResponse.json({ successCount, errorCount, skipCount });
+
+    } catch (e: any) {
+        console.error("Import error:", e);
+        return NextResponse.json({ error: e.message || "インポートに失敗しました" }, { status: 500 });
     }
 }

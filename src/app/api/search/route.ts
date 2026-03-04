@@ -4,7 +4,7 @@ import { searchBooks, getBookById, searchSeriesVolumes } from "@/lib/services/se
 /**
  * GET /api/search?q=暗殺教室&maxResults=10
  * GET /api/search?q=暗殺教室&series=true  ← シリーズ全巻取得モード
- * Google Books API検索のプロキシ
+ * 書籍検索APIプロキシ（楽天ブックスAPI優先、Google Booksフォールバック）
  */
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);

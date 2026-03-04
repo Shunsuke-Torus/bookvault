@@ -1,14 +1,108 @@
 import type {
     GoogleBooksResponse,
     GoogleBooksVolume,
+    RakutenBooksResponse,
+    RakutenBooksItem,
     BookSearchResult,
 } from "@/lib/types";
-import { googleBooksConfig } from "@/lib/config";
+import { googleBooksConfig, rakutenBooksConfig, isRakutenBooksConfigured } from "@/lib/config";
+
+/**
+ * メインの検索ハブ（楽天APIを優先し、だめならGoogle APIへフォールバック）
+ */
+export async function searchBooks(
+    query: string,
+    maxResults: number = rakutenBooksConfig.defaultHits,
+    startIndex: number = 0
+): Promise<BookSearchResult[]> {
+    // 1. 楽天APIで検索を試みる
+    if (isRakutenBooksConfigured()) {
+        const rakutenResults = await searchRakutenBooks(query, maxResults, startIndex);
+        if (rakutenResults.length > 0) {
+            return rakutenResults;
+        }
+    }
+
+    // 2. フォールバック: 楽天APIで見つからなかった場合のみGoogle APIを使用
+    return searchGoogleBooks(query, maxResults, startIndex);
+}
+
+/**
+ * 楽天ブックスAPIで書籍検索を行う
+ */
+export async function searchRakutenBooks(
+    query: string,
+    maxResults: number = rakutenBooksConfig.defaultHits,
+    startIndex: number = 0
+): Promise<BookSearchResult[]> {
+    // 楽天APIは page 指定 (1-indexed)。startIndexから逆算する
+    // 例: startIndex=0, hits=30 -> page=1
+    // 例: startIndex=30, hits=30 -> page=2
+    const page = Math.floor(startIndex / maxResults) + 1;
+    // 楽天APIは最大30件まで
+    const hits = Math.min(maxResults, 30);
+
+    const params = new URLSearchParams({
+        title: query,
+        applicationId: rakutenBooksConfig.appId,
+        accessKey: rakutenBooksConfig.accessKey,
+        hits: String(hits),
+        page: String(page),
+        format: "json",
+    });
+
+    if (rakutenBooksConfig.affiliateId) {
+        params.set("affiliateId", rakutenBooksConfig.affiliateId);
+    }
+
+    try {
+        const response = await fetch(`${rakutenBooksConfig.baseUrl}?${params}`);
+        if (!response.ok) {
+            console.error(`Rakuten API error: ${response.status}`, await response.text());
+            return [];
+        }
+
+        const data: RakutenBooksResponse = await response.json();
+        if (!data.Items || data.Items.length === 0) return [];
+
+        return data.Items.map(item => rakutenItemToSearchResult(item.Item));
+    } catch (error) {
+        console.error("Failed to fetch from Rakuten API:", error);
+        return [];
+    }
+}
+
+/**
+ * 楽天ブックスAPIでISBN検索を行う（1件取得用）
+ */
+export async function searchRakutenByIsbn(
+    isbn: string
+): Promise<BookSearchResult | null> {
+    const params = new URLSearchParams({
+        isbn: isbn,
+        applicationId: rakutenBooksConfig.appId,
+        accessKey: rakutenBooksConfig.accessKey,
+        format: "json",
+    });
+
+    try {
+        const response = await fetch(`${rakutenBooksConfig.baseUrl}?${params}`);
+        if (!response.ok) return null;
+
+        const data: RakutenBooksResponse = await response.json();
+        if (!data.Items || data.Items.length === 0) return null;
+
+        return rakutenItemToSearchResult(data.Items[0].Item);
+    } catch (error) {
+        console.error("Failed to fetch from Rakuten API (ISBN):", error);
+        return null;
+    }
+}
 
 /**
  * Google Books APIでタイトル検索を行う
  */
-export async function searchBooks(
+async function searchGoogleBooks(
     query: string,
     maxResults: number = googleBooksConfig.defaultMaxResults,
     startIndex: number = 0
@@ -39,8 +133,8 @@ export async function searchBooks(
 
 /**
  * シリーズの全巻をページングで取得する
- * Google Books APIは1クエリで最大40件しか返さないため、
- * startIndexを使った複数ページ取得で全巻をカバーする
+ * 楽天APIは1クエリで最大30件、Google APIは最大40件のため、
+ * ページングで全巻をカバーする
  */
 export async function searchSeriesVolumes(
     seriesTitle: string,
@@ -48,39 +142,47 @@ export async function searchSeriesVolumes(
 ): Promise<BookSearchResult[]> {
     const allResults: BookSearchResult[] = [];
     const seenIds = new Set<string>();
+    // 楽天APIの最大hitsは30
+    const pageSize = isRakutenBooksConfigured() ? 30 : 40;
 
     for (let page = 0; page < maxPages; page++) {
-        const startIndex = page * 40;
-        const results = await searchBooks(seriesTitle, 40, startIndex);
+        const startIndex = page * pageSize;
+        const results = await searchBooks(seriesTitle, pageSize, startIndex);
 
         if (results.length === 0) break;
 
         for (const r of results) {
-            if (!seenIds.has(r.googleBooksId)) {
-                seenIds.add(r.googleBooksId);
+            if (!seenIds.has(r.externalId)) {
+                seenIds.add(r.externalId);
                 allResults.push(r);
             }
         }
-
-        // Google APIはmaxResults=40でも20件しか返さないことがあるため、
-        // 単純に結果が0件になるまで取得するか、最大ページ数で打ち切る
     }
 
     return allResults;
 }
 
 /**
- * Google Books IDで書籍詳細を取得する
+ * 外部IDで書籍詳細を取得する
+ * - "rakuten-{isbn}" 形式の場合は楽天APIでISBN検索
+ * - それ以外はGoogle Books IDとして検索
  */
 export async function getBookById(
-    googleBooksId: string
+    externalId: string
 ): Promise<BookSearchResult | null> {
+    // 楽天IDの場合はISBN検索
+    if (externalId.startsWith("rakuten-")) {
+        const isbn = externalId.replace("rakuten-", "");
+        return searchRakutenByIsbn(isbn);
+    }
+
+    // Google Books IDとしてフォールバック
     const params = new URLSearchParams();
     if (googleBooksConfig.apiKey) {
         params.set("key", googleBooksConfig.apiKey);
     }
     const qs = params.toString() ? `?${params}` : "";
-    const response = await fetch(`${googleBooksConfig.baseUrl}/${googleBooksId}${qs}`);
+    const response = await fetch(`${googleBooksConfig.baseUrl}/${externalId}${qs}`);
     if (!response.ok) return null;
 
     const volume: GoogleBooksVolume = await response.json();
@@ -109,7 +211,7 @@ function volumeToSearchResult(volume: GoogleBooksVolume): BookSearchResult {
     ) ?? null;
 
     return {
-        googleBooksId: volume.id,
+        externalId: volume.id,
         title: info.title,
         seriesTitle,
         volumeNumber,
@@ -122,6 +224,29 @@ function volumeToSearchResult(volume: GoogleBooksVolume): BookSearchResult {
         categories: info.categories ?? [],
         listPrice: volume.saleInfo?.listPrice?.amount ?? null,
         seriesId: info.seriesInfo?.volumeSeries?.[0]?.seriesId ?? null,
+    };
+}
+
+/**
+ * 楽天ブックスのアイテムをBookSearchResultに変換
+ */
+function rakutenItemToSearchResult(item: RakutenBooksItem["Item"]): BookSearchResult {
+    const { seriesTitle, volumeNumber } = parseTitle(item.title);
+
+    return {
+        externalId: `rakuten-${item.isbn}`,
+        title: item.title,
+        seriesTitle: seriesTitle || item.seriesName || null,
+        volumeNumber,
+        authors: item.author ? item.author.split("/") : [],
+        publisher: item.publisherName || null,
+        publishedDate: item.salesDate?.split("頃")[0] || null,
+        description: item.itemCaption || null,
+        isbn: item.isbn,
+        coverImageUrl: item.largeImageUrl || item.mediumImageUrl || item.smallImageUrl || null,
+        categories: [item.size],
+        listPrice: item.itemPrice,
+        seriesId: null, // 楽天APIには共通のシリーズIDがないためnull
     };
 }
 
@@ -172,4 +297,3 @@ function parseTitle(title: string): {
 
     return { seriesTitle: null, volumeNumber: null };
 }
-

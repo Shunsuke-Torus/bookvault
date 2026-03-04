@@ -14,17 +14,18 @@ import type { CreateBookInput } from "@/lib/types";
  * 書籍を登録する（シリーズ自動作成 + 外部ID紐付け）
  */
 export async function createBook(input: CreateBookInput) {
-    // ── googleBooksId による重複チェック ──
+    // ── externalId による重複チェック ──
     // シリーズ概念導入前に単体登録された書籍が、シリーズ一括登録時に
     // 再度追加されるのを防ぐ
-    if (input.googleBooksId) {
+    if (input.externalId) {
+        const extSource = input.externalId.startsWith("rakuten-") ? "rakuten" : "google_books";
         const existingExtId = db
             .select()
             .from(bookExternalId)
             .where(
                 and(
-                    eq(bookExternalId.source, "google_books"),
-                    eq(bookExternalId.externalId, input.googleBooksId)
+                    eq(bookExternalId.source, extSource),
+                    eq(bookExternalId.externalId, input.externalId)
                 )
             )
             .get();
@@ -43,18 +44,16 @@ export async function createBook(input: CreateBookInput) {
 
                 if (!resolvedSeriesId) {
                     const seriesTitle = extractSeriesTitle(input.title);
-                    const existingSeries = db
+                    const candidateSeries = db
                         .select()
                         .from(series)
-                        .where(
-                            and(
-                                eq(series.title, seriesTitle),
-                                eq(series.author, input.author)
-                            )
-                        )
-                        .get();
-                    if (existingSeries) {
-                        resolvedSeriesId = existingSeries.id;
+                        .where(eq(series.title, seriesTitle))
+                        .all();
+                    const matchedSeries = candidateSeries.find(
+                        (s) => normalizeAuthor(s.author) === normalizeAuthor(input.author)
+                    );
+                    if (matchedSeries) {
+                        resolvedSeriesId = matchedSeries.id;
                     }
                 }
 
@@ -92,21 +91,36 @@ export async function createBook(input: CreateBookInput) {
             .trim();
     }
 
+    /**
+     * 著者名を正規化するヘルパー
+     * 楽天APIでは同じ著者でも「松井優征」「松井 優征」のように
+     * スペースの有無が異なる場合がある。日本語文字間のスペースを除去する
+     */
+    function normalizeAuthor(author: string): string {
+        // 日本語文字（CJK統合漢字・ひらがな・カタカナ）間のスペースを除去
+        return author.replace(
+            /([\u3000-\u9FFF\uF900-\uFAFF])\s+([\u3000-\u9FFF\uF900-\uFAFF])/g,
+            "$1$2"
+        ).trim();
+    }
+
+    // 入力の著者名を正規化
+    const normalizedAuthor = normalizeAuthor(input.author);
+
     // シリーズの検索 or 作成
     if (!seriesDbId) {
         const seriesTitle = extractSeriesTitle(input.title);
 
-        // 既存シリーズをタイトル+著者で検索
-        const existingSeries = db
+        // 既存シリーズをタイトル+著者で検索（著者名は正規化済みで比較）
+        const allSeriesWithTitle = db
             .select()
             .from(series)
-            .where(
-                and(
-                    eq(series.title, seriesTitle),
-                    eq(series.author, input.author)
-                )
-            )
-            .get();
+            .where(eq(series.title, seriesTitle))
+            .all();
+
+        const existingSeries = allSeriesWithTitle.find(
+            (s) => normalizeAuthor(s.author) === normalizedAuthor
+        );
 
         if (existingSeries) {
             seriesDbId = existingSeries.id;
@@ -116,7 +130,7 @@ export async function createBook(input: CreateBookInput) {
                 .insert(series)
                 .values({
                     title: seriesTitle,
-                    author: input.author,
+                    author: normalizedAuthor,
                     publisher: input.publisher,
                     coverImageUrl: input.coverImageUrl,
                     description: input.description,
@@ -125,13 +139,14 @@ export async function createBook(input: CreateBookInput) {
                 .get();
             seriesDbId = result.id;
 
-            // Google BooksシリーズIDを紐付け
-            if (input.googleSeriesId) {
+            // 外部シリーズIDを紐付け
+            if (input.externalSeriesId) {
+                const seriesSource = input.externalId?.startsWith("rakuten-") ? "rakuten" : "google_books";
                 db.insert(seriesExternalId)
                     .values({
                         seriesId: seriesDbId,
-                        source: "google_books",
-                        externalId: input.googleSeriesId,
+                        source: seriesSource,
+                        externalId: input.externalSeriesId,
                     })
                     .run();
             }
@@ -156,13 +171,14 @@ export async function createBook(input: CreateBookInput) {
         .returning()
         .get();
 
-    // Google Books外部IDを紐付け
-    if (input.googleBooksId) {
+    // 外部IDを紐付け（楽天 or Google Books）
+    if (input.externalId) {
+        const extSource = input.externalId.startsWith("rakuten-") ? "rakuten" : "google_books";
         db.insert(bookExternalId)
             .values({
                 bookId: newBook.id,
-                source: "google_books",
-                externalId: input.googleBooksId,
+                source: extSource,
+                externalId: input.externalId,
             })
             .run();
     }
