@@ -28,3 +28,12 @@ next-env.d.ts
 
 # debug
 npm-debug.log*
+
+# AI
+copilot-instructions.md
+GEMINI.md
+
+# docs
+disc-006-book-management-service.md
+disc-008-bookvault-feasibility-analysis.md
+disc-009-bookvault-database-design.md

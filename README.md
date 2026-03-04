@@ -70,9 +70,3 @@ docker compose up -d
 | `/api/series?id=N`       | GET      | シリーズ詳細（巻一覧）   |
 | `/api/platforms`         | GET      | プラットフォーム一覧     |
 | `/api/import`            | POST     | CSVインポート            |
-
-## 関連ドキュメント
-
-- 🏠 [インフラドキュメント](https://github.com/Shunsuke-Torus/saitama-hub-infrastructure)
-- 💬 [設計議論: disc-006](https://github.com/Shunsuke-Torus/saitama-hub-infrastructure/blob/main/docs/discussions/disc-006-book-management-service.md)
-- 🗄️ [DB設計: disc-009](https://github.com/Shunsuke-Torus/saitama-hub-infrastructure/blob/main/docs/discussions/disc-009-bookvault-database-design.md)

@@ -1,16 +1,45 @@
 services:
-  app:
-    build: .
-    container_name: bookvault-app
-    ports:
-      - "3000:3000"
-    volumes:
-      - bookvault-data:/app/data
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=/app/data/bookvault.db
-    restart: unless-stopped
+    # 開発環境（ソースコードはボリュームマウント）
+    app-dev:
+        build:
+            context: .
+            dockerfile: Dockerfile.dev
+        container_name: bookvault-dev
+        ports:
+            - "3000:3000"
+        env_file:
+            - .env.local
+        volumes:
+            - .:/app                   # ソースコードをマウント（ホスト⇔コンテナ同期）
+            - /app/node_modules        # node_modulesはコンテナ内のものを優先
+            - bookvault-data:/app/data # DBファイルは永続化
+        environment:
+            - NODE_ENV=development
+            - DATABASE_URL=/app/data/bookvault.db
+            - HOSTNAME=0.0.0.0
+            - WATCHPACK_POLLING=true   # Docker内でのファイル変更検知を有効化
+        profiles:
+            - dev
+
+    # 本番環境
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: bookvault-app
+        ports:
+            - "3000:3000"
+        env_file:
+            - .env.local
+        volumes:
+            - bookvault-data:/app/data
+        environment:
+            - NODE_ENV=production
+            - DATABASE_URL=/app/data/bookvault.db
+        restart: unless-stopped
+        profiles:
+            - prod
 
 volumes:
-  bookvault-data:
-    driver: local
+    bookvault-data:
+        driver: local
