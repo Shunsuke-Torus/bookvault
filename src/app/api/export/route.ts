@@ -55,7 +55,7 @@ export async function GET(request: Request) {
                     isbn: b.isbn || "",
                     platform: "",
                     format: "",
-                    status: b.status,
+                    status: b.readingStatus,
                     rating: b.rating || "",
                     purchased_at: "",
                     memo: b.memo || ""
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
                 isbn: b.isbn || "",
                 platform: o.platformName || "",
                 format: o.format || "",
-                status: b.status,
+                status: b.readingStatus,
                 rating: b.rating || "",
                 purchased_at: o.purchasedAt || "",
                 memo: b.memo || ""

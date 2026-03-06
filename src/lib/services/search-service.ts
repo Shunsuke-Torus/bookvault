@@ -73,6 +73,49 @@ export async function searchRakutenBooks(
 }
 
 /**
+ * 楽天ブックスAPIで新刊（発売日が未来、または直近の巻）を検索する。
+ * sort=-releaseDate を指定し、最新の巻を優先的に取得する。
+ */
+export async function searchUpcomingReleases(
+    seriesTitle: string,
+    author?: string,
+    maxResults: number = 5
+): Promise<BookSearchResult[]> {
+    if (!isRakutenBooksConfigured()) return [];
+
+    // 作者名がある場合はキーワードに追加して精度を上げる
+    const query = author ? `${seriesTitle} ${author}` : seriesTitle;
+
+    const params = new URLSearchParams({
+        title: query,
+        applicationId: rakutenBooksConfig.appId,
+        accessKey: rakutenBooksConfig.accessKey,
+        hits: String(maxResults),
+        page: "1",
+        sort: "-releaseDate", // 発売日降順
+        format: "json",
+    });
+
+    if (rakutenBooksConfig.affiliateId) {
+        params.set("affiliateId", rakutenBooksConfig.affiliateId);
+    }
+
+    try {
+        const response = await fetch(`${rakutenBooksConfig.baseUrl}?${params}`);
+        if (!response.ok) return [];
+
+        const data: RakutenBooksResponse = await response.json();
+        if (!data.Items || data.Items.length === 0) return [];
+
+        // 検索結果からBookSearchResultに変換
+        return data.Items.map(item => rakutenItemToSearchResult(item.Item));
+    } catch (error) {
+        console.error("Failed to fetch upcoming releases from Rakuten API:", error);
+        return [];
+    }
+}
+
+/**
  * 楽天ブックスAPIでISBN検索を行う（1件取得用）
  */
 export async function searchRakutenByIsbn(

@@ -37,6 +37,7 @@ export const book = sqliteTable("book", {
     title: text("title").notNull(),
     volumeNumber: integer("volume_number"),
     isbn: text("isbn"), // NULL許容・非UNIQUE（電子書籍はISBNがないケースが多い）
+    publishedAt: text("published_at"),
     coverImageUrl: text("cover_image_url"),
     coverImagePath: text("cover_image_path"),
     readingStatus: text("reading_status", {
