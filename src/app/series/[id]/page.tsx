@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface OwnershipInfo {
     id: number;
@@ -64,7 +65,9 @@ export default function SeriesDetailPage({
         platformName: "",
         format: "digital",
     });
+    const [editingOwnership, setEditingOwnership] = useState<{ id: number, bookId: number, platformName: string, format: string } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const router = useRouter();
 
     useEffect(() => {
         fetch(`/api/series?id=${id}`)
@@ -183,6 +186,59 @@ export default function SeriesDetailPage({
         }
     }
 
+    async function handleEditOwnership(e: React.FormEvent) {
+        e.preventDefault();
+        if (!editingOwnership) return;
+
+        setIsSubmitting(true);
+        try {
+            const res = await fetch("/api/ownerships", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: editingOwnership.id,
+                    platformName: editingOwnership.platformName,
+                    format: editingOwnership.format,
+                }),
+            });
+            if (res.ok) {
+                setEditingOwnership(null);
+                await reloadData();
+            } else {
+                const errData = await res.json();
+                alert(errData.error || "エラーが発生しました");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("所有情報の更新に失敗しました");
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function handleDeleteOwnership(ownershipId: number) {
+        if (!confirm("本当にこの所有情報を削除して、未所有の状態に戻しますか？")) return;
+
+        setIsSubmitting(true);
+        try {
+            const res = await fetch(`/api/ownerships?id=${ownershipId}`, {
+                method: "DELETE",
+            });
+            if (res.ok) {
+                setEditingOwnership(null);
+                await reloadData();
+            } else {
+                const errData = await res.json();
+                alert(errData.error || "エラーが発生しました");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("所有情報の削除に失敗しました");
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
     function getBookUrl(book: BookItem): string | null {
         if (!book.ownerships || book.ownerships.length === 0) return null;
         const own = book.ownerships[0];
@@ -192,6 +248,28 @@ export default function SeriesDetailPage({
         }
         if (own.libraryUrl) return own.libraryUrl;
         return null;
+    }
+
+    async function handleDeleteSeries() {
+        if (!confirm("本当にこのシリーズ全体をライブラリから削除しますか？\n（関連するすべての巻・所有情報が消去されます）")) return;
+
+        setIsSubmitting(true);
+        try {
+            const res = await fetch(`/api/series?id=${id}`, {
+                method: "DELETE",
+            });
+            if (res.ok) {
+                router.push("/bookshelf");
+            } else {
+                const errData = await res.json();
+                alert(errData.error || "エラーが発生しました");
+                setIsSubmitting(false);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("シリーズの削除に失敗しました");
+            setIsSubmitting(false);
+        }
     }
 
     if (loading) {
@@ -234,10 +312,20 @@ export default function SeriesDetailPage({
 
     return (
         <>
-            <Link href="/bookshelf" className="inline-flex items-center gap-1 text-sm text-text-muted py-3 hover:text-text-primary transition-colors">
-                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                本棚
-            </Link>
+            <div className="flex justify-between items-center py-3">
+                <Link href="/bookshelf" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-primary transition-colors">
+                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                    本棚
+                </Link>
+                <button
+                    onClick={handleDeleteSeries}
+                    disabled={isSubmitting}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full text-text-muted hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
+                    title="シリーズ全体を削除する"
+                >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+            </div>
 
             <div className="flex gap-5 py-4 max-sm:flex-col max-sm:items-center max-sm:text-center">
                 {coverImage ? (
@@ -382,9 +470,20 @@ export default function SeriesDetailPage({
                                 {isOwned && (
                                     <div className="flex items-center gap-1.5 mt-1">
                                         {book.ownerships.map((own) => (
-                                            <span key={own.id} className="text-[10px] px-1.5 py-0.5 bg-bg-secondary border border-border rounded text-text-secondary font-medium">
+                                            <button
+                                                key={own.id}
+                                                type="button"
+                                                onClick={() => setEditingOwnership({
+                                                    id: own.id,
+                                                    bookId: book.id,
+                                                    platformName: platforms.find(p => p.displayName === own.platformDisplayName)?.name || "",
+                                                    format: own.format
+                                                })}
+                                                className="text-[10px] px-1.5 py-0.5 bg-bg-secondary border border-border hover:border-accent hover:text-accent rounded text-text-secondary font-medium transition-colors cursor-pointer"
+                                                title="クリックして修正・削除"
+                                            >
                                                 {own.platformDisplayName}
-                                            </span>
+                                            </button>
                                         ))}
                                     </div>
                                 )}
@@ -508,6 +607,64 @@ export default function SeriesDetailPage({
                                 <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-sm hover:bg-accent-hover transition-all disabled:opacity-50 cursor-pointer">
                                     {isSubmitting ? "追加中..." : "追加する"}
                                 </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 所有編集・削除モーダル */}
+            {editingOwnership && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" onClick={() => setEditingOwnership(null)}>
+                    <div className="bg-bg-primary rounded-2xl w-full max-w-sm p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-text-primary mb-4 text-center">所有情報を編集</h3>
+                        <form onSubmit={handleEditOwnership}>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-text-secondary mb-1.5">プラットフォーム <span className="text-red-500">*</span></label>
+                                <select
+                                    className="w-full border border-border rounded-xl px-4 py-2.5 bg-bg-secondary text-sm outline-none focus:border-accent transition-colors"
+                                    value={editingOwnership.platformName}
+                                    onChange={e => setEditingOwnership({ ...editingOwnership, platformName: e.target.value })}
+                                    required
+                                >
+                                    <option value="">プラットフォームを選択</option>
+                                    {platforms.map(p => (
+                                        <option key={p.id} value={p.name}>{p.displayName}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-text-secondary mb-1.5">フォーマット</label>
+                                <select
+                                    className="w-full border border-border rounded-xl px-4 py-2.5 bg-bg-secondary text-sm outline-none focus:border-accent transition-colors"
+                                    value={editingOwnership.format}
+                                    onChange={e => setEditingOwnership({ ...editingOwnership, format: e.target.value })}
+                                >
+                                    <option value="digital">電子書籍 (Digital)</option>
+                                    <option value="physical">紙媒体 (Physical)</option>
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-3">
+                                <button type="submit" disabled={isSubmitting} className="w-full py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-sm hover:bg-accent-hover transition-all disabled:opacity-50 cursor-pointer">
+                                    {isSubmitting ? "更新中..." : "保存する"}
+                                </button>
+                                <div className="flex gap-3 justify-center">
+                                    <button
+                                        type="button"
+                                        disabled={isSubmitting}
+                                        onClick={() => handleDeleteOwnership(editingOwnership.id)}
+                                        className="flex-1 py-2.5 rounded-xl text-sm font-medium text-red-500 bg-red-50 hover:bg-red-100 transition-colors cursor-pointer"
+                                    >
+                                        所有情報を削除
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingOwnership(null)}
+                                        className="flex-1 py-2.5 rounded-xl text-sm font-medium text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
+                                    >
+                                        キャンセル
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>

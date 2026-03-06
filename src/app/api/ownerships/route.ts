@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ownership, platform } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
     try {
@@ -44,6 +44,99 @@ export async function POST(request: NextRequest) {
         console.error("Ownership POST error:", error);
         return NextResponse.json(
             { error: "所有情報の登録に失敗しました" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function PATCH(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { id, platformName, format, customUrl, platformBookId } = body;
+
+        if (!id) {
+            return NextResponse.json(
+                { error: "ownership id は必須です" },
+                { status: 400 }
+            );
+        }
+
+        let updateData: any = {};
+
+        if (platformName) {
+            const plt = await db
+                .select()
+                .from(platform)
+                .where(eq(platform.name, platformName))
+                .get();
+
+            if (!plt) {
+                return NextResponse.json(
+                    { error: "指定されたプラットフォームが見つかりません" },
+                    { status: 404 }
+                );
+            }
+            updateData.platformId = plt.id;
+        }
+
+        if (format !== undefined) updateData.format = format;
+        if (customUrl !== undefined) updateData.customUrl = customUrl;
+        if (platformBookId !== undefined) updateData.platformBookId = platformBookId;
+
+        const [updatedOwnership] = await db
+            .update(ownership)
+            .set(updateData)
+            .where(eq(ownership.id, id))
+            .returning();
+
+        if (!updatedOwnership) {
+            return NextResponse.json(
+                { error: "指定された所有情報が見つかりません" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json(updatedOwnership, { status: 200 });
+    } catch (error) {
+        console.error("Ownership PATCH error:", error);
+        return NextResponse.json(
+            { error: "所有情報の更新に失敗しました" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(request: NextRequest) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const idStr = searchParams.get('id');
+
+        if (!idStr) {
+            return NextResponse.json(
+                { error: "ownership id は必須です" },
+                { status: 400 }
+            );
+        }
+
+        const id = parseInt(idStr, 10);
+
+        const [deleted] = await db
+            .delete(ownership)
+            .where(eq(ownership.id, id))
+            .returning();
+
+        if (!deleted) {
+            return NextResponse.json(
+                { error: "指定された所有情報が見つかりません" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json({ success: true }, { status: 200 });
+    } catch (error) {
+        console.error("Ownership DELETE error:", error);
+        return NextResponse.json(
+            { error: "所有情報の削除に失敗しました" },
             { status: 500 }
         );
     }

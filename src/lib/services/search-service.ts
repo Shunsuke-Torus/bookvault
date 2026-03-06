@@ -297,23 +297,26 @@ function rakutenItemToSearchResult(item: RakutenBooksItem["Item"]): BookSearchRe
  * 全角数字を半角に変換するヘルパー
  */
 function normalizeDigits(str: string): string {
-    return str.replace(/[０-９]/g, (ch) =>
-        String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30)
-    );
+    return str.replace(/[０-９ａ-ｚＡ-Ｚ]/g, (ch) =>
+        String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+    ).replace(/　/g, " ").replace(/［/g, "[").replace(/］/g, "]");
 }
 
 /**
  * タイトル文字列からシリーズ名と巻数を分離する
  * 例: "暗殺教室 8" → { seriesTitle: "暗殺教室", volumeNumber: 8 }
  * 例: "メダリスト（６）" → { seriesTitle: "メダリスト", volumeNumber: 6 }
- * 例: "ノルウェイの森" → { seriesTitle: null, volumeNumber: null }
+ * 例: "Fate/stay night [Heaven's Feel] 3巻" → { seriesTitle: "Fate/stay night [Heaven's Feel]", volumeNumber: 3 }
  */
 function parseTitle(title: string): {
     seriesTitle: string | null;
     volumeNumber: number | null;
 } {
-    // 全角数字を半角に正規化
-    const normalized = normalizeDigits(title);
+    // 全角英数字・スペース・括弧を半角に正規化して揺れを吸収
+    let normalized = normalizeDigits(title);
+
+    // 連続するスペースを1つにまとめる
+    normalized = normalized.replace(/\s+/g, ' ').trim();
 
     const patterns = [
         // "タイトル（数字）" 全角括弧 (例: "メダリスト（14）")
@@ -338,5 +341,5 @@ function parseTitle(title: string): {
         }
     }
 
-    return { seriesTitle: null, volumeNumber: null };
+    return { seriesTitle: title.trim(), volumeNumber: null };
 }

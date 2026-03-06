@@ -299,3 +299,12 @@ export async function getStandaloneBooks() {
         .orderBy(book.title)
         .all();
 }
+
+/**
+ * シリーズと関連するすべての書籍、所有情報、外部ID情報を削除する
+ */
+export async function deleteSeries(seriesId: number) {
+    // Schema defines onDelete: "cascade" for book and external IDs, 
+    // so deleting the series will automatically cascade in SQLite.
+    return db.delete(series).where(eq(series.id, seriesId)).run();
+}

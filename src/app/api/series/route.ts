@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAllSeries, getSeriesBooks } from "@/lib/services/book-service";
+import { getAllSeries, getSeriesBooks, deleteSeries } from "@/lib/services/book-service";
 
 /**
  * GET /api/series
@@ -29,6 +29,31 @@ export async function GET(request: NextRequest) {
         console.error("Series GET error:", error);
         return NextResponse.json(
             { error: "シリーズの取得に失敗しました" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(request: NextRequest) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const idStr = searchParams.get('id');
+
+        if (!idStr) {
+            return NextResponse.json(
+                { error: "id は必須です" },
+                { status: 400 }
+            );
+        }
+
+        const id = parseInt(idStr, 10);
+        await deleteSeries(id);
+
+        return NextResponse.json({ success: true }, { status: 200 });
+    } catch (error) {
+        console.error("Series DELETE error:", error);
+        return NextResponse.json(
+            { error: "シリーズの削除に失敗しました" },
             { status: 500 }
         );
     }
