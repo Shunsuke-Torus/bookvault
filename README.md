@@ -71,3 +71,12 @@ docker compose up -d
 | `/api/platforms`         | GET      | プラットフォーム一覧     |
 | `/api/import`            | POST     | CSV/JSONインポート       |
 | `/api/export`            | GET      | CSV/JSONエクスポート     |
+
+
+## APIキー取得
+
+### 楽天ブックスAPI
+https://webservice.rakuten.co.jp/app/list
+
+### How to use
+https://webservice.rakuten.co.jp/explorer/api/BooksBook/Search

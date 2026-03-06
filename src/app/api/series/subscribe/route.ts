@@ -64,7 +64,16 @@ export async function POST(request: NextRequest) {
                     )
                     .get();
 
-                if (existingExt) continue; // 既に登録済みならスキップ
+                if (existingExt) {
+                    // 既に登録済みの場合、単行本として登録されている等で seriesId が設定されていない可能性がある
+                    // そのため、既存のbookの seriesId を今回の seriesDbId に更新して紐付ける
+                    await db
+                        .update(book)
+                        .set({ seriesId: seriesDbId })
+                        .where(eq(book.id, existingExt.bookId));
+                    addedCount++;
+                    continue; // 挿入はスキップ
+                }
             }
 
             // bookテーブルへ挿入

@@ -63,6 +63,14 @@ export default function SearchPage() {
         }
     }
 
+    function normalizePublisher(pub: string | null): string {
+        if (!pub) return "不明";
+        return pub
+            .replace(/(株式会社|有限会社|合同会社)/g, "")
+            .replace(/[\s　・]/g, "")
+            .toLowerCase();
+    }
+
     function buildGroups(items: SearchResult[]): SeriesGroup[] {
         const filtered = items.filter(
             (item) => item.authors.length > 0 && (item.seriesTitle || item.volumeNumber)
@@ -92,22 +100,24 @@ export default function SearchPage() {
             if (group.volumes.length >= 3) {
                 const pubCount = new Map<string, number>();
                 for (const v of group.volumes) {
-                    const pub = v.publisher || "不明";
-                    pubCount.set(pub, (pubCount.get(pub) || 0) + 1);
+                    const normPub = normalizePublisher(v.publisher);
+                    pubCount.set(normPub, (pubCount.get(normPub) || 0) + 1);
                 }
-                let maxPub = "";
+                let maxPubNorm = "";
                 let maxCount = 0;
-                for (const [pub, count] of pubCount) {
+                for (const [pubNorm, count] of pubCount) {
                     if (count > maxCount) {
-                        maxPub = pub;
+                        maxPubNorm = pubNorm;
                         maxCount = count;
                     }
                 }
                 if (pubCount.size > 1 && maxCount >= group.volumes.length * 0.5) {
                     group.volumes = group.volumes.filter(
-                        (v) => (v.publisher || "不明") === maxPub
+                        (v) => normalizePublisher(v.publisher) === maxPubNorm
                     );
-                    group.publisher = maxPub;
+                    // Find actual dominant publisher name to display (just pick the first one matching)
+                    const actualPub = group.volumes.find(v => normalizePublisher(v.publisher) === maxPubNorm)?.publisher;
+                    group.publisher = actualPub || group.publisher;
                 }
             }
         }
@@ -145,7 +155,7 @@ export default function SearchPage() {
                         item.volumeNumber !== null &&
                         !existingVolumes.has(item.volumeNumber) &&
                         item.authors.length > 0 &&
-                        (!group.publisher || (item.publisher || "不明") === group.publisher)
+                        (!group.publisher || !item.publisher || normalizePublisher(item.publisher) === normalizePublisher(group.publisher))
                     ) {
                         group.volumes.push(item);
                         existingVolumes.add(item.volumeNumber);

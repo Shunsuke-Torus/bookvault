@@ -307,6 +307,8 @@ function normalizeDigits(str: string): string {
  * 例: "暗殺教室 8" → { seriesTitle: "暗殺教室", volumeNumber: 8 }
  * 例: "メダリスト（６）" → { seriesTitle: "メダリスト", volumeNumber: 6 }
  * 例: "Fate/stay night [Heaven's Feel] 3巻" → { seriesTitle: "Fate/stay night [Heaven's Feel]", volumeNumber: 3 }
+ * 例: "オーバーロード1 不死者の王" → { seriesTitle: "オーバーロード", volumeNumber: 1 }
+ * 例: "オーバーロード15 半森妖精の神人 ［上］" → { seriesTitle: "オーバーロード", volumeNumber: 15 }
  */
 function parseTitle(title: string): {
     seriesTitle: string | null;
@@ -324,11 +326,18 @@ function parseTitle(title: string): {
         // "タイトル(数字)" 半角括弧 (例: "Dr.STONE (5)")
         /^(.+?)[\s]*\((\d+)\)$/,
         // "タイトル 第N巻" (例: "進撃の巨人 第3巻")
-        /^(.+?)\s*第(\d+)巻$/,
+        /^(.+?)\s*第(\d+)巻(?:[\s].*)?$/,
         // "タイトル N巻" (例: "進撃の巨人 3巻")
-        /^(.+?)\s+(\d+)巻$/,
-        // "タイトル 数字" (例: "暗殺教室 8") — 最後に試す
+        /^(.+?)\s+(\d+)巻(?:[\s].*)?$/,
+        // "タイトル N サブタイトル" (例: "オーバーロード 1 不死者の王") - スペースありの数字
+        /^(.+?)\s+(\d+)\s+.*$/,
+        // "タイトル 数字" (例: "暗殺教室 8") — 末尾が強制的に数字
         /^(.+?)\s+(\d+)$/,
+        // "タイトル数字 サブタイトル" (例: "オーバーロード15 半森妖精の神人 [上]") 
+        // -> 文字列開始直後以外の場所から抽出して数字の誤爆を防ぐ (e.g. 20世紀少年)
+        /^([^\d]+?)(\d+)\s+.*$/,
+        // "タイトル数字" (例: "オーバーロード1") - 末尾が文字なし
+        /^([^\d]+?)(\d+)$/
     ];
 
     for (const pattern of patterns) {
