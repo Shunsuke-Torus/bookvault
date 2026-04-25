@@ -36,7 +36,11 @@ export default function RootLayout({
                         <NavLinks />
                     </div>
                 </header>
-                <main className="max-w-[960px] mx-auto px-5">{children}</main>
+                <main className="max-w-[960px] mx-auto px-5 pb-24 md:pb-6">{children}</main>
+
+                <div className="md:hidden fixed bottom-0 left-0 right-0 z-[100] bg-bg-primary border-t border-border shadow-[0_-4px_6px_-2px_rgba(0,0,0,0.05)]">
+                    <NavLinks isMobile={true} />
+                </div>
             </body>
         </html>
     );

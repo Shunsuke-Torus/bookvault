@@ -22,10 +22,11 @@ export async function POST(request: NextRequest) {
 
         // 2. シリーズを検索 or 作成
         let seriesDbId: number;
-        const candidateSeries = await db
+        const candidateSeries = db
             .select()
             .from(series)
-            .where(eq(series.title, seriesTitle));
+            .where(eq(series.title, seriesTitle))
+            .all();
 
         const existingSeries = candidateSeries.find(
             (s) => normalizeAuthor(s.author) === normalizedAuthor
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
         if (existingSeries) {
             seriesDbId = existingSeries.id;
         } else {
-            const [newSeries] = await db
+            const newSeries = db
                 .insert(series)
                 .values({
                     title: seriesTitle,
@@ -42,7 +43,8 @@ export async function POST(request: NextRequest) {
                     publisher: publisher,
                     coverImageUrl: volumes[0]?.coverImageUrl || null,
                 })
-                .returning();
+                .returning()
+                .get();
             seriesDbId = newSeries.id;
         }
 
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
             // externalIdでの重複チェック
             if (vol.externalId) {
                 const extSource = vol.externalId.startsWith("rakuten-") ? "rakuten" : "google_books";
-                const existingExt = await db
+                const existingExt = db
                     .select()
                     .from(bookExternalId)
                     .where(
@@ -67,10 +69,11 @@ export async function POST(request: NextRequest) {
                 if (existingExt) {
                     // 既に登録済みの場合、単行本として登録されている等で seriesId が設定されていない可能性がある
                     // そのため、既存のbookの seriesId を今回の seriesDbId に更新して紐付ける
-                    await db
+                    db
                         .update(book)
                         .set({ seriesId: seriesDbId })
-                        .where(eq(book.id, existingExt.bookId));
+                        .where(eq(book.id, existingExt.bookId))
+                        .run();
                     addedCount++;
                     continue; // 挿入はスキップ
                 }
@@ -81,7 +84,7 @@ export async function POST(request: NextRequest) {
                 ? `${seriesTitle} ${vol.volumeNumber}`
                 : vol.title;
 
-            const [newBook] = await db
+            const newBook = db
                 .insert(book)
                 .values({
                     seriesId: seriesDbId,
@@ -92,19 +95,21 @@ export async function POST(request: NextRequest) {
                     publishedAt: vol.publishedDate || null,
                     readingStatus: "unread", // 未所持・未読
                 })
-                .returning();
+                .returning()
+                .get();
 
             addedCount++;
 
             // externalIdの紐付け
             if (vol.externalId) {
                 const extSource = vol.externalId.startsWith("rakuten-") ? "rakuten" : "google_books";
-                await db.insert(bookExternalId)
+                db.insert(bookExternalId)
                     .values({
                         bookId: newBook.id,
                         source: extSource,
                         externalId: vol.externalId,
-                    });
+                    })
+                    .run();
             }
         }
 

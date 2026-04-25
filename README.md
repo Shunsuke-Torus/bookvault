@@ -49,7 +49,11 @@ npm run dev
 ### Docker Compose
 
 ```bash
+# 本番相当（デフォルト）
 docker compose up -d
+
+# 開発用（ホットリロードしたい場合）
+docker compose --profile dev up -d
 ```
 
 ### 環境変数（オプション）

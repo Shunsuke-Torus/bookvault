@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const plt = await db
+        const plt = db
             .select()
             .from(platform)
             .where(eq(platform.name, platformName))
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const [newOwnership] = await db
+        const newOwnership = db
             .insert(ownership)
             .values({
                 bookId,
@@ -37,7 +37,8 @@ export async function POST(request: NextRequest) {
                 platformBookId,
                 format,
             })
-            .returning();
+            .returning()
+            .get();
 
         return NextResponse.json(newOwnership, { status: 201 });
     } catch (error) {
@@ -64,7 +65,7 @@ export async function PATCH(request: NextRequest) {
         let updateData: any = {};
 
         if (platformName) {
-            const plt = await db
+            const plt = db
                 .select()
                 .from(platform)
                 .where(eq(platform.name, platformName))
@@ -83,11 +84,12 @@ export async function PATCH(request: NextRequest) {
         if (customUrl !== undefined) updateData.customUrl = customUrl;
         if (platformBookId !== undefined) updateData.platformBookId = platformBookId;
 
-        const [updatedOwnership] = await db
+        const updatedOwnership = db
             .update(ownership)
             .set(updateData)
             .where(eq(ownership.id, id))
-            .returning();
+            .returning()
+            .get();
 
         if (!updatedOwnership) {
             return NextResponse.json(
@@ -120,10 +122,11 @@ export async function DELETE(request: NextRequest) {
 
         const id = parseInt(idStr, 10);
 
-        const [deleted] = await db
+        const deleted = db
             .delete(ownership)
             .where(eq(ownership.id, id))
-            .returning();
+            .returning()
+            .get();
 
         if (!deleted) {
             return NextResponse.json(

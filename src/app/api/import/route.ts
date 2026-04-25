@@ -35,14 +35,14 @@ export async function POST(request: Request) {
         let skipCount = 0;
 
         // Create Import Log
-        const [{ importId }] = await db.insert(importLog).values({
+        const { importId } = db.insert(importLog).values({
             source: sourceType,
             filename: fileName,
             totalRecords: parsedData.length
-        }).returning({ importId: importLog.id });
+        }).returning({ importId: importLog.id }).get();
 
         // Fetch all platforms once
-        const allPlatforms = await db.select().from(platform).all();
+        const allPlatforms = db.select().from(platform).all();
         const platformMap = new Map(allPlatforms.map(p => [p.name, p.id]));
 
         for (const row of parsedData) {
@@ -55,22 +55,22 @@ export async function POST(request: Request) {
                 }
 
                 // 1. Find or create series
-                let seriesRecord = await db.select().from(series).where(
+                let seriesRecord = db.select().from(series).where(
                     and(eq(series.title, title), eq(series.author, author))
                 ).get();
 
                 if (!seriesRecord) {
-                    const [newSeries] = await db.insert(series).values({
+                    const newSeries = db.insert(series).values({
                         title,
                         author,
                         status: "ongoing"
-                    }).returning();
+                    }).returning().get();
                     seriesRecord = newSeries;
                 }
 
                 // 2. Insert book if not exists for that series and volume
                 const volumeNumber = row.volume ? parseInt(row.volume, 10) : undefined;
-                let bookRecord = await db.select().from(book).where(
+                let bookRecord = db.select().from(book).where(
                     and(
                         eq(book.seriesId, seriesRecord.id),
                         volumeNumber !== undefined ? eq(book.volumeNumber, volumeNumber) : eq(book.title, title)
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
                 ).get();
 
                 if (!bookRecord) {
-                    const [newBook] = await db.insert(book).values({
+                    const newBook = db.insert(book).values({
                         seriesId: seriesRecord.id,
                         title: title,
                         volumeNumber,
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
                         readingStatus: row.status || row.readingStatus || "unread",
                         rating: row.rating ? parseInt(row.rating, 10) : null,
                         memo: row.memo || null,
-                    }).returning();
+                    }).returning().get();
                     bookRecord = newBook;
                 }
 
@@ -96,16 +96,16 @@ export async function POST(request: Request) {
                         if (own.platformName) {
                             const platId = platformMap.get(own.platformName);
                             if (platId) {
-                                const existingOwnership = await db.select().from(ownership).where(
+                                const existingOwnership = db.select().from(ownership).where(
                                     and(eq(ownership.bookId, bookRecord.id), eq(ownership.platformId, platId))
                                 ).get();
                                 if (!existingOwnership) {
-                                    await db.insert(ownership).values({
+                                    db.insert(ownership).values({
                                         bookId: bookRecord.id,
                                         platformId: platId,
                                         format: own.format || "digital",
                                         purchasedAt: own.purchasedAt || row.purchased_at || null
-                                    });
+                                    }).run();
                                 }
                             }
                         }
@@ -115,44 +115,44 @@ export async function POST(request: Request) {
                     if (platStr) {
                         const platId = platformMap.get(platStr);
                         if (platId) {
-                            const existingOwnership = await db.select().from(ownership).where(
+                            const existingOwnership = db.select().from(ownership).where(
                                 and(eq(ownership.bookId, bookRecord.id), eq(ownership.platformId, platId))
                             ).get();
                             if (!existingOwnership) {
-                                await db.insert(ownership).values({
+                                db.insert(ownership).values({
                                     bookId: bookRecord.id,
                                     platformId: platId,
                                     format: row.format || "digital",
                                     purchasedAt: row.purchased_at || row.purchasedAt || null
-                                });
+                                }).run();
                             }
                         }
                     }
                 }
 
                 successCount++;
-                await db.insert(importLogItem).values({
+                db.insert(importLogItem).values({
                     importLogId: importId,
                     bookId: bookRecord.id,
                     rawData: JSON.stringify(row),
                     status: "success"
-                });
+                }).run();
 
             } catch (err: any) {
                 errorCount++;
-                await db.insert(importLogItem).values({
+                db.insert(importLogItem).values({
                     importLogId: importId,
                     rawData: JSON.stringify(row),
                     status: "error",
                     errorMessage: err.message
-                });
+                }).run();
             }
         }
 
-        await db.update(importLog).set({
+        db.update(importLog).set({
             successCount,
             errorCount
-        }).where(eq(importLog.id, importId));
+        }).where(eq(importLog.id, importId)).run();
 
         return NextResponse.json({ successCount, errorCount, skipCount });
 

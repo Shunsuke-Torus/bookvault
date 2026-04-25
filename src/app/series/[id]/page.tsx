@@ -64,8 +64,9 @@ export default function SeriesDetailPage({
     const [ownershipForm, setOwnershipForm] = useState({
         platformName: "",
         format: "digital",
+        customUrl: "",
     });
-    const [editingOwnership, setEditingOwnership] = useState<{ id: number, bookId: number, platformName: string, format: string } | null>(null);
+    const [editingOwnership, setEditingOwnership] = useState<{ id: number, bookId: number, platformName: string, format: string, customUrl: string } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
 
@@ -165,6 +166,7 @@ export default function SeriesDetailPage({
                         bookId: bookId,
                         platformName: ownershipForm.platformName,
                         format: ownershipForm.format,
+                        customUrl: ownershipForm.customUrl ? ownershipForm.customUrl : null,
                     }),
                 });
                 if (!res.ok) {
@@ -174,7 +176,7 @@ export default function SeriesDetailPage({
             }
 
             setAddingOwnershipForBooks([]);
-            setOwnershipForm({ platformName: "", format: "digital" });
+            setOwnershipForm({ platformName: "", format: "digital", customUrl: "" });
             await reloadData();
             setSelectedIds(new Set());
             setBatchMode(false);
@@ -199,6 +201,7 @@ export default function SeriesDetailPage({
                     id: editingOwnership.id,
                     platformName: editingOwnership.platformName,
                     format: editingOwnership.format,
+                    customUrl: editingOwnership.customUrl ? editingOwnership.customUrl : null,
                 }),
             });
             if (res.ok) {
@@ -477,7 +480,8 @@ export default function SeriesDetailPage({
                                                     id: own.id,
                                                     bookId: book.id,
                                                     platformName: platforms.find(p => p.displayName === own.platformDisplayName)?.name || "",
-                                                    format: own.format
+                                                    format: own.format,
+                                                    customUrl: own.customUrl || ""
                                                 })}
                                                 className="text-[10px] px-1.5 py-0.5 bg-bg-secondary border border-border hover:border-accent hover:text-accent rounded text-text-secondary font-medium transition-colors cursor-pointer"
                                                 title="クリックして修正・削除"
@@ -589,7 +593,7 @@ export default function SeriesDetailPage({
                                     ))}
                                 </select>
                             </div>
-                            <div className="mb-6">
+                            <div className="mb-4">
                                 <label className="block text-sm font-medium text-text-secondary mb-1.5">フォーマット</label>
                                 <select
                                     className="w-full border border-border rounded-xl px-4 py-2.5 bg-bg-secondary text-sm outline-none focus:border-accent transition-colors"
@@ -600,6 +604,25 @@ export default function SeriesDetailPage({
                                     <option value="physical">紙媒体 (Physical)</option>
                                 </select>
                             </div>
+                            <details className="mb-6 group">
+                                <summary className="text-sm font-medium text-text-secondary cursor-pointer hover:text-text-primary transition-colors flex items-center gap-1 select-none">
+                                    <span className="material-symbols-outlined text-[18px] transition-transform group-open:rotate-90">chevron_right</span>
+                                    <span className="material-symbols-outlined text-[16px]">link</span>
+                                    カスタムURL設定（任意）
+                                </summary>
+                                <div className="mt-3 pl-2 pr-1">
+                                    <input
+                                        type="url"
+                                        placeholder="https://..."
+                                        className="w-full border border-border rounded-xl px-4 py-2.5 bg-bg-secondary text-sm outline-none focus:border-accent transition-colors"
+                                        value={ownershipForm.customUrl}
+                                        onChange={e => setOwnershipForm({ ...ownershipForm, customUrl: e.target.value })}
+                                    />
+                                    <p className="text-xs text-text-muted mt-2 leading-relaxed">
+                                        デフォルトのURLではなく、特定のページヘ直接飛びたい場合に指定してください。
+                                    </p>
+                                </div>
+                            </details>
                             <div className="flex gap-3 justify-end mt-2">
                                 <button type="button" onClick={() => setAddingOwnershipForBooks([])} className="px-5 py-2.5 rounded-xl text-sm font-medium text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer">
                                     キャンセル
@@ -633,7 +656,7 @@ export default function SeriesDetailPage({
                                     ))}
                                 </select>
                             </div>
-                            <div className="mb-6">
+                            <div className="mb-4">
                                 <label className="block text-sm font-medium text-text-secondary mb-1.5">フォーマット</label>
                                 <select
                                     className="w-full border border-border rounded-xl px-4 py-2.5 bg-bg-secondary text-sm outline-none focus:border-accent transition-colors"
@@ -644,6 +667,25 @@ export default function SeriesDetailPage({
                                     <option value="physical">紙媒体 (Physical)</option>
                                 </select>
                             </div>
+                            <details className="mb-6 group" open={!!editingOwnership.customUrl}>
+                                <summary className="text-sm font-medium text-text-secondary cursor-pointer hover:text-text-primary transition-colors flex items-center gap-1 select-none">
+                                    <span className="material-symbols-outlined text-[18px] transition-transform group-open:rotate-90">chevron_right</span>
+                                    <span className="material-symbols-outlined text-[16px]">link</span>
+                                    カスタムURL設定（任意）
+                                </summary>
+                                <div className="mt-3 pl-2 pr-1">
+                                    <input
+                                        type="url"
+                                        placeholder="https://..."
+                                        className="w-full border border-border rounded-xl px-4 py-2.5 bg-bg-secondary text-sm outline-none focus:border-accent transition-colors"
+                                        value={editingOwnership.customUrl}
+                                        onChange={e => setEditingOwnership({ ...editingOwnership, customUrl: e.target.value })}
+                                    />
+                                    <p className="text-xs text-text-muted mt-2 leading-relaxed">
+                                        デフォルトのURLではなく、特定のページヘ直接飛びたい場合に指定してください。
+                                    </p>
+                                </div>
+                            </details>
                             <div className="flex flex-col gap-3">
                                 <button type="submit" disabled={isSubmitting} className="w-full py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-sm hover:bg-accent-hover transition-all disabled:opacity-50 cursor-pointer">
                                     {isSubmitting ? "更新中..." : "保存する"}

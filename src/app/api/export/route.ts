@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const format = searchParams.get("format") || "json";
 
     try {
-        const books = await db.select({
+        const books = db.select({
             ...getTableColumns(book),
             seriesTitle: series.title,
             authorName: series.author,
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
             .leftJoin(series, eq(book.seriesId, series.id))
             .all();
 
-        const ownerships = await db.select({
+        const ownerships = db.select({
             ...getTableColumns(ownership),
             platformName: platform.name,
         })
