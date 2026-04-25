@@ -65,7 +65,7 @@ export async function GET(request: Request) {
                         volumeNumber: newBook.volumeNumber,
                         title: newBook.title
                     });
-                    
+
                     console.log(`[Cron Debug] existingBooks after push:`, JSON.stringify(existingBooks, null, 2));
                 }
             }
